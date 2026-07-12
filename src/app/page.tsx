@@ -1,65 +1,192 @@
-import Image from "next/image";
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
 
 export default function Home() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    async function redirectExistingUser() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        return;
+      }
+
+      const nextUrl = new URLSearchParams(
+        window.location.search
+      ).get("next");
+
+      if (nextUrl?.startsWith("/person/")) {
+        window.location.replace(nextUrl);
+      }
+    }
+
+    void redirectExistingUser();
+  }, []);
+
+  async function handleLogin(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    setLoading(true);
+    setMessage("");
+
+    const cleanUsername = username
+      .trim()
+      .toLowerCase();
+
+    if (!cleanUsername || !password) {
+      setMessage(
+        "Please enter your username and password."
+      );
+      setLoading(false);
+      return;
+    }
+
+    const internalEmail =
+      `${cleanUsername}@staff.tov`;
+
+    const { data, error } =
+      await supabase.auth.signInWithPassword({
+        email: internalEmail,
+        password,
+      });
+
+    if (error || !data.user) {
+      setMessage("Incorrect username or password.");
+      setLoading(false);
+      return;
+    }
+
+    const { data: profile, error: profileError } =
+      await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .single();
+
+    if (profileError || !profile) {
+      await supabase.auth.signOut();
+
+      setMessage(
+        "This account does not have a profile."
+      );
+
+      setLoading(false);
+      return;
+    }
+
+    const nextUrl = new URLSearchParams(
+      window.location.search
+    ).get("next");
+
+    if (nextUrl?.startsWith("/person/")) {
+      window.location.replace(nextUrl);
+      return;
+    }
+
+    if (profile.role === "admin") {
+      window.location.replace("/dashboard");
+      return;
+    }
+
+    setMessage(
+      "Login successful. Please scan a participant QR code."
+    );
+
+    setLoading(false);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#0B2E82] via-[#1747A6] to-[#061C52] px-5">
+      <section className="w-full max-w-md">
+        <div className="mb-8 text-center text-white">
+          <div className="mb-4 text-6xl">
+            🪷
+          </div>
+
+          <p className="text-xs uppercase tracking-[0.32em] text-blue-200">
+            Vietnam Around the World
+          </p>
+
+          <h1 className="mt-4 text-4xl font-bold">
+            Taste of Vietnam 2026
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="mt-3 text-blue-100">
+            QR Check-In & Check-Out System
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        <form
+          onSubmit={handleLogin}
+          className="rounded-3xl bg-white p-8 shadow-2xl"
+        >
+          <h2 className="text-center text-2xl font-bold text-[#0B2E82]">
+            Staff & Organizer Login
+          </h2>
+
+          <label
+            htmlFor="username"
+            className="mb-2 mt-7 block font-semibold text-slate-700"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Username
+          </label>
+
+          <input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(event) =>
+              setUsername(event.target.value)
+            }
+            placeholder="Enter your username"
+            autoComplete="username"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1747A6] focus:ring-2 focus:ring-blue-100"
+          />
+
+          <label
+            htmlFor="password"
+            className="mb-2 mt-5 block font-semibold text-slate-700"
           >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+            Password
+          </label>
+
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(event) =>
+              setPassword(event.target.value)
+            }
+            placeholder="Enter your password"
+            autoComplete="current-password"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1747A6] focus:ring-2 focus:ring-blue-100"
+          />
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-7 w-full rounded-xl bg-[#0B2E82] py-3 font-semibold text-white transition hover:bg-[#1747A6] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? "Signing in..." : "Login"}
+          </button>
+
+          {message && (
+            <p className="mt-4 rounded-xl bg-blue-50 p-3 text-center text-sm font-medium text-[#0B2E82]">
+              {message}
+            </p>
+          )}
+        </form>
+      </section>
+    </main>
   );
 }
