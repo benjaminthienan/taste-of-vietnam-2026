@@ -355,7 +355,7 @@ export async function importExcel(
     ]);
 
     const eventRole = getText(row, [
-      "Who are you participating as?",
+      "What is your current occupation? ( if you are a student, please list the program you are studying)",
       "Role",
     ]);
 
