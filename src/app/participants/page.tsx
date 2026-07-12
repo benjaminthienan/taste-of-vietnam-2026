@@ -12,6 +12,7 @@ import Sidebar from "@/components/Sidebar";
 import {
   AlertCircle,
   FileSpreadsheet,
+  Pencil,
   Plus,
   Search,
   Trash2,
@@ -45,10 +46,26 @@ type Participant = {
 };
 
 const availableDays = [
+  "July 15",
   "July 16",
   "July 17",
   "July 18",
 ];
+
+const participantColumns = `
+  id,
+  qr_token,
+  name,
+  first_name,
+  last_name,
+  date_of_birth,
+  email,
+  phone,
+  picture_url,
+  event_role,
+  access_days,
+  current_status
+`;
 
 function formatPhoneInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 10);
@@ -112,6 +129,17 @@ function sortAccessDays(days: string[]) {
   });
 }
 
+function splitRoles(role: string | null) {
+  if (!role) {
+    return [];
+  }
+
+  return role
+    .split(/\r?\n|,|;/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export default function ParticipantsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -121,6 +149,9 @@ export default function ParticipantsPage() {
 
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+
+  const [editingParticipant, setEditingParticipant] =
+    useState<Participant | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -132,13 +163,11 @@ export default function ParticipantsPage() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [dateOfBirth, setDateOfBirth] =
-    useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [eventRole, setEventRole] = useState("");
-  const [pictureUrl, setPictureUrl] =
-    useState("");
+  const [pictureUrl, setPictureUrl] = useState("");
   const [accessDays, setAccessDays] = useState<
     string[]
   >([]);
@@ -153,22 +182,7 @@ export default function ParticipantsPage() {
 
     const { data, error } = await supabase
       .from("people")
-      .select(
-        `
-          id,
-          qr_token,
-          name,
-          first_name,
-          last_name,
-          date_of_birth,
-          email,
-          phone,
-          picture_url,
-          event_role,
-          access_days,
-          current_status
-        `
-      )
+      .select(participantColumns)
       .order("name", { ascending: true });
 
     if (error) {
@@ -194,8 +208,30 @@ export default function ParticipantsPage() {
     setAccessDays([]);
   }
 
-  function openForm() {
+  function openAddForm() {
     resetForm();
+    setEditingParticipant(null);
+    setPageError("");
+    setSuccessMessage("");
+    setShowForm(true);
+  }
+
+  function openEditForm(participant: Participant) {
+    setEditingParticipant(participant);
+
+    setFirstName(participant.first_name ?? "");
+    setLastName(participant.last_name ?? "");
+    setDateOfBirth(participant.date_of_birth ?? "");
+    setEmail(participant.email ?? "");
+    setPhone(
+      participant.phone
+        ? formatPhoneInput(participant.phone)
+        : ""
+    );
+    setEventRole(participant.event_role ?? "");
+    setPictureUrl(participant.picture_url ?? "");
+    setAccessDays(participant.access_days ?? []);
+
     setPageError("");
     setSuccessMessage("");
     setShowForm(true);
@@ -203,6 +239,7 @@ export default function ParticipantsPage() {
 
   function closeForm() {
     resetForm();
+    setEditingParticipant(null);
     setShowForm(false);
   }
 
@@ -214,6 +251,49 @@ export default function ParticipantsPage() {
           )
         : [...currentDays, day]
     );
+  }
+
+  function validateParticipantForm() {
+    if (!firstName.trim()) {
+      alert("Please enter the first name.");
+      return false;
+    }
+
+    if (!lastName.trim()) {
+      alert("Please enter the last name.");
+      return false;
+    }
+
+    if (!dateOfBirth) {
+      alert("Please select the date of birth.");
+      return false;
+    }
+
+    if (!email.trim() || !email.includes("@")) {
+      alert("Please enter a valid email address.");
+      return false;
+    }
+
+    const phoneDigits = phone.replace(/\D/g, "");
+
+    if (phoneDigits.length !== 10) {
+      alert(
+        "Please enter a complete 10-digit phone number."
+      );
+      return false;
+    }
+
+    if (!eventRole.trim()) {
+      alert("Please enter the participant's role.");
+      return false;
+    }
+
+    if (accessDays.length === 0) {
+      alert("Please select at least one access day.");
+      return false;
+    }
+
+    return true;
   }
 
   async function handleImportExcel(
@@ -238,30 +318,13 @@ export default function ParticipantsPage() {
       );
 
       if (!confirmed) {
-        setImporting(false);
-        event.target.value = "";
         return;
       }
 
       const { data, error } = await supabase
         .from("people")
         .insert(importedParticipants)
-        .select(
-          `
-            id,
-            qr_token,
-            name,
-            first_name,
-            last_name,
-            date_of_birth,
-            email,
-            phone,
-            picture_url,
-            event_role,
-            access_days,
-            current_status
-          `
-        );
+        .select(participantColumns);
 
       if (error) {
         throw new Error(error.message);
@@ -294,7 +357,7 @@ export default function ParticipantsPage() {
     }
   }
 
-  async function handleAddParticipant(
+  async function handleSaveParticipant(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
@@ -302,42 +365,7 @@ export default function ParticipantsPage() {
     setPageError("");
     setSuccessMessage("");
 
-    if (!firstName.trim()) {
-      alert("Please enter the first name.");
-      return;
-    }
-
-    if (!lastName.trim()) {
-      alert("Please enter the last name.");
-      return;
-    }
-
-    if (!dateOfBirth) {
-      alert("Please select the date of birth.");
-      return;
-    }
-
-    if (!email.trim() || !email.includes("@")) {
-      alert("Please enter a valid email address.");
-      return;
-    }
-
-    const phoneDigits = phone.replace(/\D/g, "");
-
-    if (phoneDigits.length !== 10) {
-      alert(
-        "Please enter a complete 10-digit phone number."
-      );
-      return;
-    }
-
-    if (!eventRole.trim()) {
-      alert("Please enter the participant's role.");
-      return;
-    }
-
-    if (accessDays.length === 0) {
-      alert("Please select at least one access day.");
+    if (!validateParticipantForm()) {
       return;
     }
 
@@ -345,40 +373,70 @@ export default function ParticipantsPage() {
 
     const cleanFirstName = firstName.trim();
     const cleanLastName = lastName.trim();
-    const fullName = `${cleanFirstName} ${cleanLastName}`;
+    const fullName =
+      `${cleanFirstName} ${cleanLastName}`;
 
-    const participantToInsert: ImportedParticipant = {
+    const participantValues = {
       name: fullName,
       first_name: cleanFirstName,
       last_name: cleanLastName,
       date_of_birth: dateOfBirth,
       email: email.trim().toLowerCase(),
-      phone,
+      phone: formatPhoneInput(phone),
       event_role: eventRole.trim(),
       access_days: sortAccessDays(accessDays),
       picture_url: pictureUrl.trim() || null,
+    };
+
+    if (editingParticipant) {
+      const { data, error } = await supabase
+        .from("people")
+        .update(participantValues)
+        .eq("id", editingParticipant.id)
+        .select(participantColumns)
+        .single();
+
+      if (error) {
+        setPageError(
+          `Could not update participant: ${error.message}`
+        );
+        setSaving(false);
+        return;
+      }
+
+      const updatedParticipant =
+        data as Participant;
+
+      setParticipants((currentParticipants) =>
+        currentParticipants
+          .map((participant) =>
+            participant.id === updatedParticipant.id
+              ? updatedParticipant
+              : participant
+          )
+          .sort((a, b) =>
+            a.name.localeCompare(b.name)
+          )
+      );
+
+      setSuccessMessage(
+        `${fullName} was updated successfully. Their QR code remains the same.`
+      );
+
+      closeForm();
+      setSaving(false);
+      return;
+    }
+
+    const participantToInsert: ImportedParticipant = {
+      ...participantValues,
       current_status: "not_checked_in",
     };
 
     const { data, error } = await supabase
       .from("people")
       .insert(participantToInsert)
-      .select(
-        `
-          id,
-          qr_token,
-          name,
-          first_name,
-          last_name,
-          date_of_birth,
-          email,
-          phone,
-          picture_url,
-          event_role,
-          access_days,
-          current_status
-        `
-      )
+      .select(participantColumns)
       .single();
 
     if (error) {
@@ -605,7 +663,7 @@ export default function ParticipantsPage() {
 
               <button
                 type="button"
-                onClick={openForm}
+                onClick={openAddForm}
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#0B2E82] px-5 py-3 font-semibold text-white transition hover:bg-[#1747A6]"
               >
                 <Plus size={20} />
@@ -615,166 +673,191 @@ export default function ParticipantsPage() {
           </div>
 
           <div className="max-h-[calc(100vh-290px)] overflow-auto">
-  <table className="w-full min-w-[1520px] table-fixed">
-    <colgroup>
-      <col className="w-[190px]" />
-      <col className="w-[135px]" />
-      <col className="w-[270px]" />
-      <col className="w-[150px]" />
-      <col className="w-[330px]" />
-      <col className="w-[230px]" />
-      <col className="w-[165px]" />
-      <col className="w-[80px]" />
-    </colgroup>
+            <table className="w-full min-w-[1590px] table-fixed">
+              <colgroup>
+                <col className="w-[190px]" />
+                <col className="w-[135px]" />
+                <col className="w-[270px]" />
+                <col className="w-[150px]" />
+                <col className="w-[330px]" />
+                <col className="w-[230px]" />
+                <col className="w-[165px]" />
+                <col className="w-[120px]" />
+              </colgroup>
 
-    <thead className="sticky top-0 z-10 bg-[#EAF1FF]">
-      <tr className="text-left text-sm font-semibold uppercase tracking-wide text-[#0B2E82]">
-        <th className="px-6 py-4">Name</th>
-        <th className="px-6 py-4">DOB</th>
-        <th className="px-6 py-4">Email</th>
-        <th className="px-6 py-4">Phone</th>
-        <th className="px-6 py-4">Role</th>
-        <th className="px-6 py-4">Access Days</th>
-        <th className="px-6 py-4">Status</th>
-        <th className="px-4 py-4 text-center">
-          Actions
-        </th>
-      </tr>
-    </thead>
+              <thead className="sticky top-0 z-10 bg-[#EAF1FF]">
+                <tr className="text-left text-sm font-semibold uppercase tracking-wide text-[#0B2E82]">
+                  <th className="px-6 py-4">Name</th>
+                  <th className="px-6 py-4">DOB</th>
+                  <th className="px-6 py-4">Email</th>
+                  <th className="px-6 py-4">Phone</th>
+                  <th className="px-6 py-4">Role</th>
+                  <th className="px-6 py-4">
+                    Access Days
+                  </th>
+                  <th className="px-6 py-4">
+                    Status
+                  </th>
+                  <th className="px-4 py-4 text-center">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
 
-    <tbody>
-      {loading ? (
-        <tr>
-          <td
-            colSpan={8}
-            className="px-6 py-14 text-center text-slate-500"
-          >
-            Loading participants...
-          </td>
-        </tr>
-      ) : filteredParticipants.length === 0 ? (
-        <tr>
-          <td
-            colSpan={8}
-            className="px-6 py-14 text-center text-slate-500"
-          >
-            No participants found.
-          </td>
-        </tr>
-      ) : (
-        filteredParticipants.map((participant) => {
-          const roles = participant.event_role
-            ? participant.event_role
-                .split(",")
-                .map((role) => role.trim())
-                .filter(Boolean)
-            : [];
-
-          const days = participant.access_days?.length
-            ? sortAccessDays(
-                participant.access_days
-              ).join(", ")
-            : "None";
-
-          return (
-            <tr
-              key={participant.id}
-              className="border-t border-slate-200 text-slate-700 hover:bg-blue-50/60"
-            >
-              <td className="px-6 py-5 align-middle">
-                <span className="font-semibold text-slate-900">
-                  {participant.name}
-                </span>
-              </td>
-
-              <td className="px-6 py-5 align-middle">
-                <span className="whitespace-nowrap">
-                  {formatDate(
-                    participant.date_of_birth
-                  )}
-                </span>
-              </td>
-
-              <td className="px-6 py-5 align-middle">
-                <span
-                  className="block overflow-hidden text-ellipsis whitespace-nowrap"
-                  title={
-                    participant.email ||
-                    "Not provided"
-                  }
-                >
-                  {participant.email ||
-                    "Not provided"}
-                </span>
-              </td>
-
-              <td className="px-6 py-5 align-middle">
-                <span className="whitespace-nowrap">
-                  {formatPhoneDisplay(
-                    participant.phone
-                  )}
-                </span>
-              </td>
-
-              <td className="px-6 py-5 align-middle">
-                {roles.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {roles.map((role, index) => (
-                      <span
-                        key={`${participant.id}-${role}-${index}`}
-                        className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800"
-                      >
-                        {role}
-                      </span>
-                    ))}
-                  </div>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-6 py-14 text-center text-slate-500"
+                    >
+                      Loading participants...
+                    </td>
+                  </tr>
+                ) : filteredParticipants.length ===
+                  0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-6 py-14 text-center text-slate-500"
+                    >
+                      No participants found.
+                    </td>
+                  </tr>
                 ) : (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
-                    Unassigned
-                  </span>
+                  filteredParticipants.map(
+                    (participant) => {
+                      const roles = splitRoles(
+                        participant.event_role
+                      );
+
+                      const days =
+                        participant.access_days?.length
+                          ? sortAccessDays(
+                              participant.access_days
+                            ).join(", ")
+                          : "None";
+
+                      return (
+                        <tr
+                          key={participant.id}
+                          className="border-t border-slate-200 text-slate-700 hover:bg-blue-50/60"
+                        >
+                          <td className="px-6 py-5 align-middle">
+                            <span className="font-semibold text-slate-900">
+                              {participant.name}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            <span className="whitespace-nowrap">
+                              {formatDate(
+                                participant.date_of_birth
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            <span
+                              className="block overflow-hidden text-ellipsis whitespace-nowrap"
+                              title={
+                                participant.email ||
+                                "Not provided"
+                              }
+                            >
+                              {participant.email ||
+                                "Not provided"}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            <span className="whitespace-nowrap">
+                              {formatPhoneDisplay(
+                                participant.phone
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            {roles.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {roles.map(
+                                  (role, index) => (
+                                    <span
+                                      key={`${participant.id}-${role}-${index}`}
+                                      className="rounded-full bg-blue-100 px-3 py-1 text-sm font-medium text-blue-800"
+                                    >
+                                      {role}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            ) : (
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+                                Unassigned
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            <span>{days}</span>
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-semibold ${getStatusStyle(
+                                participant.current_status
+                              )}`}
+                            >
+                              {getStatusLabel(
+                                participant.current_status
+                              )}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-5 align-middle">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  openEditForm(
+                                    participant
+                                  )
+                                }
+                                className="rounded-lg border border-blue-200 p-2 text-[#1747A6] transition hover:bg-blue-50"
+                                title="Edit participant"
+                                aria-label={`Edit ${participant.name}`}
+                              >
+                                <Pencil size={18} />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteParticipant(
+                                    participant
+                                  )
+                                }
+                                className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50"
+                                title="Delete participant"
+                                aria-label={`Delete ${participant.name}`}
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+                  )
                 )}
-              </td>
-
-              <td className="px-6 py-5 align-middle">
-                <span>{days}</span>
-              </td>
-
-              <td className="px-6 py-5 align-middle">
-                <span
-                  className={`inline-flex whitespace-nowrap rounded-full px-3 py-1 text-sm font-semibold ${getStatusStyle(
-                    participant.current_status
-                  )}`}
-                >
-                  {getStatusLabel(
-                    participant.current_status
-                  )}
-                </span>
-              </td>
-
-              <td className="px-4 py-5 text-center align-middle">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleDeleteParticipant(
-                      participant
-                    )
-                  }
-                  className="rounded-lg border border-red-200 p-2 text-red-600 transition hover:bg-red-50"
-                  title="Delete participant"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </td>
-            </tr>
-          );
-        })
-      )}
-    </tbody>
-  </table>
-</div>
+              </tbody>
+            </table>
+          </div>
 
           <div className="border-t border-slate-200 px-6 py-4 text-sm text-slate-500">
-            Showing {filteredParticipants.length} participant
+            Showing {filteredParticipants.length}{" "}
+            participant
             {filteredParticipants.length === 1
               ? ""
               : "s"}
@@ -788,12 +871,15 @@ export default function ParticipantsPage() {
             <div className="mb-6 flex items-start justify-between">
               <div>
                 <h2 className="text-2xl font-bold text-[#071A4A]">
-                  Add Participant
+                  {editingParticipant
+                    ? "Edit Participant"
+                    : "Add Participant"}
                 </h2>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  A unique QR code will be generated
-                  automatically.
+                  {editingParticipant
+                    ? "Update the participant information. Their QR code will remain the same."
+                    : "A unique QR code will be generated automatically."}
                 </p>
               </div>
 
@@ -807,7 +893,7 @@ export default function ParticipantsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddParticipant}>
+            <form onSubmit={handleSaveParticipant}>
               <div className="grid gap-5 sm:grid-cols-2">
                 <FormField label="First Name">
                   <input
@@ -817,6 +903,7 @@ export default function ParticipantsPage() {
                       setFirstName(event.target.value)
                     }
                     placeholder="Enter your first name"
+                    required
                     className="form-input"
                   />
                 </FormField>
@@ -829,6 +916,7 @@ export default function ParticipantsPage() {
                       setLastName(event.target.value)
                     }
                     placeholder="Enter your last name"
+                    required
                     className="form-input"
                   />
                 </FormField>
@@ -840,6 +928,7 @@ export default function ParticipantsPage() {
                     onChange={(event) =>
                       setDateOfBirth(event.target.value)
                     }
+                    required
                     className="form-input"
                   />
                 </FormField>
@@ -852,6 +941,7 @@ export default function ParticipantsPage() {
                       setEmail(event.target.value)
                     }
                     placeholder="name@example.com"
+                    required
                     className="form-input"
                   />
                 </FormField>
@@ -869,19 +959,21 @@ export default function ParticipantsPage() {
                       )
                     }
                     placeholder="647-555-1234"
+                    required
                     className="form-input"
                   />
                 </FormField>
 
                 <FormField label="Role">
-                  <input
-                    type="text"
+                  <textarea
                     value={eventRole}
                     onChange={(event) =>
                       setEventRole(event.target.value)
                     }
-                    placeholder="Volunteer"
-                    className="form-input"
+                    placeholder="Enter the participant's role"
+                    rows={3}
+                    required
+                    className="form-input resize-y"
                   />
                 </FormField>
               </div>
@@ -903,7 +995,7 @@ export default function ParticipantsPage() {
                   Access Days
                 </legend>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {availableDays.map((day) => (
                     <label
                       key={day}
@@ -943,8 +1035,12 @@ export default function ParticipantsPage() {
                   className="rounded-xl bg-[#0B2E82] px-5 py-3 font-semibold text-white hover:bg-[#1747A6] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving
-                    ? "Adding..."
-                    : "Add Participant"}
+                    ? editingParticipant
+                      ? "Saving Changes..."
+                      : "Adding..."
+                    : editingParticipant
+                      ? "Save Changes"
+                      : "Add Participant"}
                 </button>
               </div>
             </form>
@@ -971,33 +1067,8 @@ export default function ParticipantsPage() {
           border-color: #1747a6;
           box-shadow: 0 0 0 2px rgb(219 234 254);
         }
-
-        .two-line-text {
-          display: -webkit-box;
-          overflow: hidden;
-          line-height: 1.45rem;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-        }
       `}</style>
     </main>
-  );
-}
-
-function TwoLineText({
-  value,
-  className = "",
-}: {
-  value: string;
-  className?: string;
-}) {
-  return (
-    <span
-      className={`two-line-text ${className}`}
-      title={value}
-    >
-      {value}
-    </span>
   );
 }
 
