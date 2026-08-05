@@ -144,6 +144,7 @@ export default function ParticipantPage() {
             picture_url,
             event_role,
             access_days,
+            notes,
             current_status,
             last_action_at
           `
@@ -282,7 +283,7 @@ export default function ParticipantPage() {
 
             <InfoRow
               label="Notes"
-              value={participant.notes || "N/A"}
+              value={participant.notes?.trim() || "N/A"}
             />
 
             {participant.last_action_at && (
