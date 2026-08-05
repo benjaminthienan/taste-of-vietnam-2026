@@ -24,6 +24,7 @@ type Participant = {
   access_days: string[] | null;
   current_status: ParticipantStatus | null;
   last_action_at: string | null;
+  notes: string | null;
 };
 
 function sortAccessDays(
@@ -220,11 +221,11 @@ export default function ParticipantPage() {
           </div>
 
           <p className="mt-3 text-xs uppercase tracking-[0.25em] text-blue-200">
-            Taste of Vietnam 2026
+            Taste of SEA 2026
           </p>
 
           <h1 className="mt-2 text-2xl font-bold">
-            Backstage Access
+            Performer & Staff Check-In
           </h1>
         </header>
 
@@ -277,6 +278,11 @@ export default function ParticipantPage() {
               value={sortAccessDays(
                 participant.access_days
               )}
+            />
+
+            <InfoRow
+              label="Notes"
+              value={participant.notes || "N/A"}
             />
 
             {participant.last_action_at && (
