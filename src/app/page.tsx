@@ -114,11 +114,11 @@ export default function Home() {
           </div>
 
           <p className="text-xs uppercase tracking-[0.32em] text-blue-200">
-            Vietnam Around the World
+            Mel Lastman Square
           </p>
 
           <h1 className="mt-4 text-4xl font-bold">
-            Taste of Vietnam 2026
+            Taste of SEA 2026
           </h1>
 
           <p className="mt-3 text-blue-100">
