@@ -55,7 +55,7 @@ export default function Sidebar() {
       <aside className="fixed left-0 top-0 z-40 flex h-screen w-72 flex-col bg-[#0B2E82] text-white shadow-xl">
         <div className="border-b border-blue-700 p-8">
           <h1 className="text-2xl font-bold">
-            Taste of Vietnam 
+            Taste of SEA
           </h1>
 
           <p className="mt-2 text-blue-200">

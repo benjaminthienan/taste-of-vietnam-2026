@@ -20,10 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import {
-  importExcel,
-  type ImportedParticipant,
-} from "@/lib/importExcel";
+import { importExcel } from "@/lib/importExcel";
 
 type ParticipantStatus =
   | "not_checked_in"
@@ -42,15 +39,11 @@ type Participant = {
   picture_url: string | null;
   event_role: string | null;
   access_days: string[];
+  notes: string | null;
   current_status: ParticipantStatus;
 };
 
-const availableDays = [
-  "July 15",
-  "July 16",
-  "July 17",
-  "July 18",
-];
+const availableDays = ["August 7", "August 8"];
 
 const participantColumns = `
   id,
@@ -64,6 +57,7 @@ const participantColumns = `
   picture_url,
   event_role,
   access_days,
+  notes,
   current_status
 `;
 
@@ -86,7 +80,7 @@ function formatPhoneInput(value: string) {
 
 function formatPhoneDisplay(phone: string | null) {
   if (!phone) {
-    return "Not provided";
+    return "N/A";
   }
 
   let digits = phone.replace(/\D/g, "");
@@ -107,7 +101,7 @@ function formatPhoneDisplay(phone: string | null) {
 
 function formatDate(date: string | null) {
   if (!date) {
-    return "Not provided";
+    return "N/A";
   }
 
   return new Date(`${date}T00:00:00`).toLocaleDateString(
@@ -121,12 +115,15 @@ function formatDate(date: string | null) {
 }
 
 function sortAccessDays(days: string[]) {
-  return [...days].sort((a, b) => {
-    const dayA = Number(a.replace("July ", ""));
-    const dayB = Number(b.replace("July ", ""));
+  const order = new Map(
+    availableDays.map((day, index) => [day, index])
+  );
 
-    return dayA - dayB;
-  });
+  return [...days].sort(
+    (a, b) =>
+      (order.get(a) ?? Number.MAX_SAFE_INTEGER) -
+      (order.get(b) ?? Number.MAX_SAFE_INTEGER)
+  );
 }
 
 function splitRoles(role: string | null) {
@@ -168,6 +165,7 @@ export default function ParticipantsPage() {
   const [phone, setPhone] = useState("");
   const [eventRole, setEventRole] = useState("");
   const [pictureUrl, setPictureUrl] = useState("");
+  const [notes, setNotes] = useState("");
   const [accessDays, setAccessDays] = useState<
     string[]
   >([]);
@@ -205,6 +203,7 @@ export default function ParticipantsPage() {
     setPhone("");
     setEventRole("");
     setPictureUrl("");
+    setNotes("");
     setAccessDays([]);
   }
 
@@ -230,6 +229,7 @@ export default function ParticipantsPage() {
     );
     setEventRole(participant.event_role ?? "");
     setPictureUrl(participant.picture_url ?? "");
+    setNotes(participant.notes ?? "");
     setAccessDays(participant.access_days ?? []);
 
     setPageError("");
@@ -264,11 +264,6 @@ export default function ParticipantsPage() {
       return false;
     }
 
-    if (!dateOfBirth) {
-      alert("Please select the date of birth.");
-      return false;
-    }
-
     if (!email.trim() || !email.includes("@")) {
       alert("Please enter a valid email address.");
       return false;
@@ -276,15 +271,15 @@ export default function ParticipantsPage() {
 
     const phoneDigits = phone.replace(/\D/g, "");
 
-    if (phoneDigits.length !== 10) {
+    if (phoneDigits.length > 0 && phoneDigits.length !== 10) {
       alert(
-        "Please enter a complete 10-digit phone number."
+        "Please enter a complete 10-digit phone number or leave it blank."
       );
       return false;
     }
 
     if (!eventRole.trim()) {
-      alert("Please enter the participant's role.");
+      alert("Please enter the performance category.");
       return false;
     }
 
@@ -380,12 +375,13 @@ export default function ParticipantsPage() {
       name: fullName,
       first_name: cleanFirstName,
       last_name: cleanLastName,
-      date_of_birth: dateOfBirth,
+      date_of_birth: dateOfBirth || null,
       email: email.trim().toLowerCase(),
-      phone: formatPhoneInput(phone),
+      phone: phone.trim() ? formatPhoneInput(phone) : null,
       event_role: eventRole.trim(),
       access_days: sortAccessDays(accessDays),
       picture_url: pictureUrl.trim() || null,
+      notes: notes.trim() || null,
     };
 
     if (editingParticipant) {
@@ -428,7 +424,7 @@ export default function ParticipantsPage() {
       return;
     }
 
-    const participantToInsert: ImportedParticipant = {
+    const participantToInsert = {
       ...participantValues,
       current_status: "not_checked_in",
     };
@@ -519,6 +515,9 @@ export default function ParticipantsPage() {
           .includes(searchValue) ||
         participant.event_role
           ?.toLowerCase()
+          .includes(searchValue) ||
+        participant.notes
+          ?.toLowerCase()
           .includes(searchValue)
       );
     });
@@ -563,8 +562,8 @@ export default function ParticipantsPage() {
           </h1>
 
           <p className="mt-2 text-slate-600">
-            Add participants or import the Taste of
-            Vietnam registration spreadsheet.
+            Add performers or import the Taste of SEA
+            registration spreadsheet.
           </p>
         </div>
 
@@ -625,7 +624,7 @@ export default function ParticipantsPage() {
                 onChange={(event) =>
                   setSearch(event.target.value)
                 }
-                placeholder="Search name, email, phone, or role..."
+                placeholder="Search name, email, category, or notes..."
                 className="w-full rounded-xl border border-slate-300 py-3 pl-12 pr-4 text-slate-900 outline-none placeholder:text-slate-500 focus:border-[#1747A6] focus:ring-2 focus:ring-blue-100"
               />
             </div>
@@ -673,14 +672,15 @@ export default function ParticipantsPage() {
           </div>
 
           <div className="max-h-[calc(100vh-290px)] overflow-auto">
-            <table className="w-full min-w-[1590px] table-fixed">
+            <table className="w-full min-w-[1810px] table-fixed">
               <colgroup>
                 <col className="w-[190px]" />
                 <col className="w-[135px]" />
                 <col className="w-[270px]" />
                 <col className="w-[150px]" />
-                <col className="w-[330px]" />
-                <col className="w-[230px]" />
+                <col className="w-[280px]" />
+                <col className="w-[210px]" />
+                <col className="w-[300px]" />
                 <col className="w-[165px]" />
                 <col className="w-[120px]" />
               </colgroup>
@@ -691,10 +691,11 @@ export default function ParticipantsPage() {
                   <th className="px-6 py-4">DOB</th>
                   <th className="px-6 py-4">Email</th>
                   <th className="px-6 py-4">Phone</th>
-                  <th className="px-6 py-4">Role</th>
+                  <th className="px-6 py-4">Performance Category</th>
                   <th className="px-6 py-4">
                     Access Days
                   </th>
+                  <th className="px-6 py-4">Notes</th>
                   <th className="px-6 py-4">
                     Status
                   </th>
@@ -708,7 +709,7 @@ export default function ParticipantsPage() {
                 {loading ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-6 py-14 text-center text-slate-500"
                     >
                       Loading participants...
@@ -718,7 +719,7 @@ export default function ParticipantsPage() {
                   0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-6 py-14 text-center text-slate-500"
                     >
                       No participants found.
@@ -801,6 +802,15 @@ export default function ParticipantsPage() {
 
                           <td className="px-6 py-5 align-middle">
                             <span>{days}</span>
+                          </td>
+
+                          <td className="px-6 py-5 align-middle">
+                            <span
+                              className="block overflow-hidden text-ellipsis whitespace-nowrap"
+                              title={participant.notes || "N/A"}
+                            >
+                              {participant.notes || "N/A"}
+                            </span>
                           </td>
 
                           <td className="px-6 py-5 align-middle">
@@ -921,14 +931,13 @@ export default function ParticipantsPage() {
                   />
                 </FormField>
 
-                <FormField label="Date of Birth">
+                <FormField label="Date of Birth (Optional)">
                   <input
                     type="date"
                     value={dateOfBirth}
                     onChange={(event) =>
                       setDateOfBirth(event.target.value)
                     }
-                    required
                     className="form-input"
                   />
                 </FormField>
@@ -946,7 +955,7 @@ export default function ParticipantsPage() {
                   />
                 </FormField>
 
-                <FormField label="Phone">
+                <FormField label="Phone (Optional)">
                   <input
                     type="tel"
                     value={phone}
@@ -958,19 +967,18 @@ export default function ParticipantsPage() {
                         )
                       )
                     }
-                    placeholder="647-555-1234"
-                    required
+                    placeholder="N/A"
                     className="form-input"
                   />
                 </FormField>
 
-                <FormField label="Role">
+                <FormField label="Performance Category">
                   <textarea
                     value={eventRole}
                     onChange={(event) =>
                       setEventRole(event.target.value)
                     }
-                    placeholder="Enter the participant's role"
+                    placeholder="Singer, dancer, band, cultural troupe..."
                     rows={3}
                     required
                     className="form-input resize-y"
@@ -985,8 +993,22 @@ export default function ParticipantsPage() {
                   onChange={(event) =>
                     setPictureUrl(event.target.value)
                   }
-                  placeholder="https://..."
+                  placeholder="N/A"
                   className="form-input"
+                />
+              </FormField>
+
+              <FormField label="Notes (Optional)">
+                <textarea
+                  value={notes}
+                  onChange={(event) =>
+                    setNotes(event.target.value)
+                  }
+                  rows={2}
+                  placeholder={
+                    "Notes: ..."
+                  }
+                  className="form-input resize-y"
                 />
               </FormField>
 
